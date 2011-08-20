@@ -777,6 +777,7 @@ static void setconvert (void)
 		host_mode = d == 4 ? RGBFB_B8G8R8A8 : RGBFB_B5G6R5PC;
 	} else {
 		;//host_mode = DirectDraw_GetSurfacePixelFormat (NULL);
+		host_mode = picasso_vidinfo.rgbformat;
 	}
 	if (d == 4)
 		alloc_colors_rgb (8, 8, 8, 16, 8, 0, 0, 0, 0, 0, p96rc, p96gc, p96bc);
@@ -3778,6 +3779,12 @@ void InitPicasso96 (void)
 			| ((i & 1) ? 0x01 : 0));
 	}
 	mode_count = DX_FillResolutions (&picasso96_pixel_format);
+
+	if (currprefs.picasso96_modeflags == 0)
+	{
+		currprefs.picasso96_modeflags = picasso96_pixel_format;
+	}
+
 }
 
 #endif
