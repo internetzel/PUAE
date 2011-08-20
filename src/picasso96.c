@@ -601,7 +601,7 @@ void picasso_handle_vsync (void)
 	if (!picasso_on)
 		createwindowscursor (0, 0, 0, 0, 0, 1);*/
 
-	if (currprefs.chipset_refreshrate >= 100) {
+	if (currprefs.chipset_refreshrate >= 100.0) {
 		vsynccnt++;
 		if (vsynccnt < 2)
 			thisisvsync = 0;
@@ -784,6 +784,7 @@ static void setconvert (void)
 	else
 		alloc_colors_rgb (5, 6, 5, 11, 5, 0, 0, 0, 0, 0, p96rc, p96gc, p96bc);
 	gfx_set_picasso_colors (picasso96_state.RGBFormat);
+	picasso_palette ();
 	if (host_mode != ohost_mode || picasso96_state.RGBFormat != orgbformat) {
 		write_log ("RTG conversion: Depth=%d HostRGBF=%d P96RGBF=%d Mode=%d\n", d, host_mode, picasso96_state.RGBFormat, v);
 		ohost_mode = host_mode;
@@ -1061,7 +1062,7 @@ static int do_blitrect_frame_buffer (struct RenderInfo *ri, struct
 	src = ri->Memory + srcx * Bpp + srcy * ri->BytesPerRow;
 	dst = dstri->Memory + dstx * Bpp + dsty * dstri->BytesPerRow;
 	if (mask != 0xFF && Bpp > 1) {
-		write_log (("P96: WARNING - BlitRect() has mask 0x%x with Bpp %d.\n", mask, Bpp));
+		write_log ("P96: WARNING - BlitRect() has mask 0x%x with Bpp %d.\n", mask, Bpp);
 	}
 
 	P96TRACE (("(%dx%d)=(%dx%d)=(%dx%d)=%d\n", srcx, srcy, dstx, dsty, width, height, opcode));
@@ -1569,6 +1570,9 @@ static struct modeids mi[] =
 	1600, 900, 170,
 	960, 600, 171,
 	1088, 612, 172,
+	1152, 648, 173,
+	1776,1000, 174,
+	2560,1440, 175,
 	-1,-1,0
 };
 
@@ -1998,6 +2002,13 @@ void picasso_enablescreen (int on)
 	checkrtglibrary();
 }
 
+static void resetpalette(void)
+{
+        unsigned int i;
+	for (i = 0; i < 256; i++)
+		picasso96_state.CLUT[i].Pad = 0xff;
+}
+
 /*
  * SetColorArray:
  * a0: struct BoardInfo
@@ -2019,16 +2030,19 @@ static int updateclut (uaecptr clut, int start, int count)
 		int g = get_byte (clut + 1);
 		int b = get_byte (clut + 2);
 
-		changed |= (picasso96_state.CLUT[i].Red != r
+		changed |= picasso96_state.CLUT[i].Red != r
 			|| picasso96_state.CLUT[i].Green != g
-			|| picasso96_state.CLUT[i].Blue != b);
-
+			|| picasso96_state.CLUT[i].Blue != b;
+		if (picasso96_state.CLUT[i].Pad) {
+			changed = 1;
+			picasso96_state.CLUT[i].Pad = 0;
+		}
 		picasso96_state.CLUT[i].Red = r;
 		picasso96_state.CLUT[i].Green = g;
 		picasso96_state.CLUT[i].Blue = b;
 		clut += 3;
 	}
-	picasso_palette ();
+	changed |= picasso_palette ();
 	return changed;
 }
 static uae_u32 REGPARAM2 picasso_SetColorArray (TrapContext *ctx)
@@ -2193,8 +2207,9 @@ static uae_u32 REGPARAM2 picasso_SetPanning (TrapContext *ctx)
 
 	full_refresh = 1;
 	set_panning_called = 1;
-	P96TRACE(("SetPanning(%d, %d, %d) Start 0x%x, BPR %d Bpp %d RGBF %d\n",
+	P96TRACE(("SetPanning(%d, %d, %d) (%dx%d) Start 0x%x, BPR %d Bpp %d RGBF %d\n",
 		Width, picasso96_state.XOffset, picasso96_state.YOffset,
+		bme_width, bme_height,
 		start_of_screen, picasso96_state.BytesPerRow, picasso96_state.BytesPerPixel, picasso96_state.RGBFormat));
 	init_picasso_screen ();
 	set_panning_called = 0;
@@ -2919,7 +2934,7 @@ static uae_u32 REGPARAM2 picasso_CalculateBytesPerRow (TrapContext *ctx)
 	uae_u16 width = m68k_dreg (regs, 0);
 	uae_u32 type = m68k_dreg (regs, 7);
 	width = GetBytesPerPixel (type) * width;
-    P96TRACE (("CalculateBytesPerRow() = %d\n", width));
+        P96TRACE (("CalculateBytesPerRow() = %d\n", width));
 	return width;
 }
 
@@ -2935,6 +2950,7 @@ static uae_u32 REGPARAM2 picasso_SetDisplay (TrapContext *ctx)
 {
 	uae_u32 state = m68k_dreg (regs, 0);
 	P96TRACE (("SetDisplay(%d)\n", state));
+	resetpalette();
 	return !state;
 }
 
@@ -2979,13 +2995,12 @@ void init_hz_p96 (void)
         } else {
                 p96vblank = currprefs.win32_rtgvblankrate;
         }
-
 	if (p96vblank <= 0)
 		p96vblank = 60;
 	if (p96vblank >= 300)
 		p96vblank = 300;
-	p96syncrate = maxvpos * vblank_hz / p96vblank;
-	write_log ("P96FREQ: %d * %g = %d / %d = %d\n", maxvpos, vblank_hz, maxvpos_nom * vblank_hz, p96vblank, p96syncrate);
+	p96syncrate = maxvpos_nom * vblank_hz / p96vblank;
+	write_log ("P96FREQ: %d*%.4f = %.4f / %d = %d\n", maxvpos_nom, vblank_hz, maxvpos_nom * vblank_hz, p96vblank, p96syncrate);
 }
 
 /* NOTE: Watch for those planeptrs of 0x00000000 and 0xFFFFFFFF for all zero / all one bitmaps !!!! */
@@ -3249,17 +3264,21 @@ static uae_u32 REGPARAM2 picasso_BlitPlanar2Direct (TrapContext *ctx)
 #include "statusline.h"
 static void statusline (uae_u8 *dst)
 {
-	int y, yy;
-	int dst_height, pitch;
+	int y, yy, slx, sly;
+	int dst_height, dst_width, pitch;
 
 	dst_height = picasso96_state.Height;
 	if (dst_height > picasso_vidinfo.height)
 		dst_height = picasso_vidinfo.height;
+	dst_width = picasso96_state.Width;
+	if (dst_width > picasso_vidinfo.width)
+		dst_width = picasso_vidinfo.width;
 	pitch = picasso_vidinfo.rowbytes;
+	statusline_getpos (&slx, &sly, picasso96_state.Width, dst_height);
 	yy = 0;
-	for (y = dst_height - TD_TOTAL_HEIGHT; y < dst_height; y++) {
-		uae_u8 *buf = dst + y * pitch;
-		draw_status_line_single (buf, picasso_vidinfo.pixbytes, yy, picasso96_state.Width, p96rc, p96gc, p96bc, NULL);
+	for (y = 0; y < TD_TOTAL_HEIGHT; y++) {
+		uae_u8 *buf = dst + (y + sly) * pitch;
+		draw_status_line_single (buf, picasso_vidinfo.pixbytes, y, dst_width, p96rc, p96gc, p96bc, NULL);
 		yy++;
 	}
 }
@@ -3495,13 +3514,13 @@ static void copyrow (uae_u8 *src, uae_u8 *dst, int x, int y, int width)
 	}
 }
 
-static void copyallinvert (uae_u8 *src, uae_u8 *dst)
+static void copyallinvert (uae_u8 *src, uae_u8 *dst, int pwidth, int pheight)
 {
 	int x, y, w;
 
-	w = picasso96_state.Width * picasso_vidinfo.pixbytes;
+	w = pwidth * picasso_vidinfo.pixbytes;
 	if (picasso96_state.RGBFormat == host_mode) {
-		for (y = 0; y < picasso96_state.Height; y++) {
+		for (y = 0; y < pheight; y++) {
 			for (x = 0; x < w; x++)
 				dst[x] = src[x] ^ 0xff;
 			dst += picasso_vidinfo.rowbytes;
@@ -3509,10 +3528,10 @@ static void copyallinvert (uae_u8 *src, uae_u8 *dst)
 		}
 	} else {
 		uae_u8 *src2 = src;
-		for (y = 0; y < picasso96_state.Height; y++) {
+		for (y = 0; y < pheight; y++) {
 			for (x = 0; x < w; x++)
 				src2[x] ^= 0xff;
-			copyrow (src, dst, 0, y, picasso96_state.Width);
+			copyrow (src, dst, 0, y, pwidth);
 			for (x = 0; x < w; x++)
 				src2[x] ^= 0xff;
 			src2 += picasso96_state.BytesPerRow;
@@ -3520,22 +3539,20 @@ static void copyallinvert (uae_u8 *src, uae_u8 *dst)
 	}
 }
 
-static void copyall (uae_u8 *src, uae_u8 *dst)
+static void copyall (uae_u8 *src, uae_u8 *dst, int pwidth, int pheight)
 {
 	int y;
-	uae_u8 *dstb;
 
-	dstb = dst;
 	if (picasso96_state.RGBFormat == host_mode) {
-		int w = picasso96_state.Width * picasso_vidinfo.pixbytes;
-		for (y = 0; y < picasso96_state.Height; y++) {
+		int w = pwidth * picasso_vidinfo.pixbytes;
+		for (y = 0; y < pheight; y++) {
 			memcpy (dst, src, w);
 			dst += picasso_vidinfo.rowbytes;
 			src += picasso96_state.BytesPerRow;
 		}
 	} else {
-		for (y = 0; y < picasso96_state.Height; y++)
-			copyrow (src, dst, 0, y, picasso96_state.Width);
+		for (y = 0; y < pheight; y++)
+			copyrow (src, dst, 0, y, pwidth);
 	}
 }
 
@@ -3548,13 +3565,18 @@ static int flushpixels (void)
 	uae_u8 *src = p96ram_start;
 #endif
 	int off = picasso96_state.XYOffset - gfxmem_start;
-	uae_u8 *src_start = src + (off & ~gwwpagemask);
-	uae_u8 *src_end = src + ((off + picasso96_state.BytesPerRow * picasso96_state.Height + gwwpagesize - 1) & ~gwwpagemask);
-	int maxy = -1;
-	int miny = picasso96_state.Height - 1;
+	uae_u8 *src_start;
+	uae_u8 *src_end;
 	int lock = 0;
 	uae_u8 *dst = NULL;
 	long gwwcnt;
+	int pwidth = picasso96_state.Width > picasso96_state.VirtualWidth ? picasso96_state.VirtualWidth : picasso96_state.Width;
+	int pheight = picasso96_state.Height > picasso96_state.VirtualHeight ? picasso96_state.VirtualHeight : picasso96_state.Height;
+	int maxy = -1;
+	int miny = pheight - 1;
+
+	src_start = src + (off & ~gwwpagemask);
+	src_end = src + ((off + picasso96_state.BytesPerRow * pheight + gwwpagesize - 1) & ~gwwpagemask);
 #if 0
 	write_log ("%dx%d %dx%d %dx%d\n", picasso96_state.Width, picasso96_state.Width,
 		picasso96_state.VirtualWidth, picasso96_state.VirtualHeight,
@@ -3594,7 +3616,7 @@ static int flushpixels (void)
 
 		dofull = gwwcnt >= ((src_end - src_start) / gwwpagesize) * 80 / 100;
 
-		dst = gfx_lock_picasso ();
+		dst = gfx_lock_picasso (dofull);
 		if (dst == NULL)
 			break;
 		lock = 1;
@@ -3605,11 +3627,11 @@ static int flushpixels (void)
 
 		if (dofull) {
 			if (flashscreen != 0)
-				copyallinvert (src + off, dst);
+				copyallinvert (src + off, dst, pwidth, pheight);
 			else
-				copyall (src + off, dst);
+				copyall (src + off, dst, pwidth, pheight);
 			miny = 0;
-			maxy = picasso96_state.Height;
+			maxy = pheight;
 			break;
 		}
 
@@ -3626,17 +3648,17 @@ static int flushpixels (void)
 				}
 
 				y = realoffset / picasso96_state.BytesPerRow;
-				if (y < picasso96_state.Height) {
+				if (y < pheight) {
 					int w = gwwpagesize / picasso96_state.BytesPerPixel;
 					x = (realoffset % picasso96_state.BytesPerRow) / picasso96_state.BytesPerPixel;
-					if (x < picasso96_state.Width)
-						copyrow (src + off, dst, x, y, picasso96_state.Width - x);
+					if (x < pwidth)
+						copyrow (src + off, dst, x, y, pwidth - x);
 					w = (gwwpagesize - (picasso96_state.BytesPerRow - x * picasso96_state.BytesPerPixel)) / picasso96_state.BytesPerPixel;
 					if (y < miny)
 						miny = y;
 					y++;
-					while (y < picasso96_state.Height && w > 0) {
-						int maxw = w > picasso96_state.Width ? picasso96_state.Width : w;
+					while (y < pheight && w > 0) {
+						int maxw = w > pwidth ? pwidth : w;
 						copyrow (src + off, dst, 0, y, maxw);
 						w -= maxw;
 						y++;
@@ -3653,7 +3675,7 @@ static int flushpixels (void)
 
 	if (!currprefs.gfx_api && (currprefs.leds_on_screen & STATUSLINE_RTG)) {
 		if (dst == NULL) {
-			dst = gfx_lock_picasso ();
+			dst = gfx_lock_picasso (false);
 			lock = 1;
 		}
 		if (dst) {
@@ -3667,7 +3689,7 @@ static int flushpixels (void)
 		if (doskip () && p96skipmode == 4) {
 			;
 		} else {
-			DX_Invalidate (miny, maxy);
+			DX_Invalidate (0, miny, pwidth, maxy - miny);
 		}
 	}
 
@@ -3837,6 +3859,21 @@ static void initvblankirq (TrapContext *ctx, uaecptr base)
 	m68k_areg (regs, 1) = p2;
 	m68k_dreg (regs, 0) = 3;			/* PORTS */
 	CallLib (ctx, get_long (4), -168);	/* AddIntServer */
+}
+
+static uae_u32 REGPARAM2 picasso_SetClock(TrapContext *ctx)
+{
+	uaecptr bi = m68k_areg (regs, 0);
+	P96TRACE(("SetClock\n"));
+	return 0;
+}
+
+static uae_u32 REGPARAM2 picasso_SetMemoryMode(TrapContext *ctx)
+{
+	uaecptr bi = m68k_areg (regs, 0);
+	uae_u32 rgbformat = m68k_dreg (regs, 7);
+	P96TRACE(("SetMemoryMode\n"));
+	return 0;
 }
 
 #define PUTABI(func) \
@@ -4041,6 +4078,7 @@ void picasso_reset (void)
 	uaegfx_active = 0;
 	interrupt_enabled = 0;
 	reserved_gfxmem = 0;
+	resetpalette();
 }
 
 void uaegfx_install_code (void)
