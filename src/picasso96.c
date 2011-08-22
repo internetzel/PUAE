@@ -821,6 +821,11 @@ void picasso_refresh (void)
 		ri.BytesPerRow = picasso96_state.BytesPerRow;
 		ri.RGBFormat = picasso96_state.RGBFormat;
 
+		P96TRACE(("P96: picasso_refresh\n"));
+		P96TRACE(("P96: Memory: 0x%X\n", ri.Memory));
+		P96TRACE(("P96: BytesPerRow: %d\n", ri.BytesPerRow));
+		P96TRACE(("P96: RGBFormat: %d\n", ri.RGBFormat));
+
 		if (set_panning_called) {
 			width = (picasso96_state.VirtualWidth < picasso96_state.Width) ?
 				picasso96_state.VirtualWidth : picasso96_state.Width;
@@ -3511,6 +3516,10 @@ static void copyrow (uae_u8 *src, uae_u8 *dst, int x, int y, int width)
 			}
 		}
 		break;
+
+	default:
+		P96TRACE (("copyrow: no conversion!\n"));
+
 	}
 }
 
@@ -3545,6 +3554,7 @@ static void copyall (uae_u8 *src, uae_u8 *dst, int pwidth, int pheight)
 
 	if (picasso96_state.RGBFormat == host_mode) {
 		int w = pwidth * picasso_vidinfo.pixbytes;
+		P96TRACE (("copyall: from 0x%X to 0x%X in blocks of 0x%X\n", src, dst, w));
 		for (y = 0; y < pheight; y++) {
 			memcpy (dst, src, w);
 			dst += picasso_vidinfo.rowbytes;
@@ -3562,7 +3572,7 @@ static int flushpixels (void)
 #ifdef JIT
 	uae_u8 *src = p96ram_start + natmem_offset;
 #else
-	uae_u8 *src = p96ram_start;
+	uae_u8 *src = gfxmemory;
 #endif
 	int off = picasso96_state.XYOffset - gfxmem_start;
 	uae_u8 *src_start;
@@ -3578,7 +3588,7 @@ static int flushpixels (void)
 	src_start = src + (off & ~gwwpagemask);
 	src_end = src + ((off + picasso96_state.BytesPerRow * pheight + gwwpagesize - 1) & ~gwwpagemask);
 #if 0
-	write_log ("%dx%d %dx%d %dx%d\n", picasso96_state.Width, picasso96_state.Width,
+	write_log ("%dx%d %dx%d %dx%d\n", picasso96_state.Width, picasso96_state.Height,
 		picasso96_state.VirtualWidth, picasso96_state.VirtualHeight,
 		picasso_vidinfo.width, picasso_vidinfo.height);
 #endif
