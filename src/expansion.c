@@ -296,6 +296,7 @@ static void REGPARAM2 expamem_wput (uaecptr addr, uae_u32 value)
 					z3num++;
 				} else {
 					// Z3 P96 RAM
+					p96memstart();
 					p2 = p96ram_start >> 16;
 				}
 				put_word (regs.regs[11] + 0x20, p2);
