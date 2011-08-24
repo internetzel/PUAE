@@ -3554,7 +3554,6 @@ static void copyall (uae_u8 *src, uae_u8 *dst, int pwidth, int pheight)
 
 	if (picasso96_state.RGBFormat == host_mode) {
 		int w = pwidth * picasso_vidinfo.pixbytes;
-		P96TRACE (("copyall: from 0x%X to 0x%X in blocks of 0x%X\n", src, dst, w));
 		for (y = 0; y < pheight; y++) {
 			memcpy (dst, src, w);
 			dst += picasso_vidinfo.rowbytes;
