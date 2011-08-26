@@ -821,11 +821,6 @@ void picasso_refresh (void)
 		ri.BytesPerRow = picasso96_state.BytesPerRow;
 		ri.RGBFormat = picasso96_state.RGBFormat;
 
-		P96TRACE(("P96: picasso_refresh\n"));
-		P96TRACE(("P96: Memory: 0x%X\n", ri.Memory));
-		P96TRACE(("P96: BytesPerRow: %d\n", ri.BytesPerRow));
-		P96TRACE(("P96: RGBFormat: %d\n", ri.RGBFormat));
-
 		if (set_panning_called) {
 			width = (picasso96_state.VirtualWidth < picasso96_state.Width) ?
 				picasso96_state.VirtualWidth : picasso96_state.Width;
@@ -3518,7 +3513,7 @@ static void copyrow (uae_u8 *src, uae_u8 *dst, int x, int y, int width)
 		break;
 
 	default:
-		P96TRACE (("copyrow: no conversion!\n"));
+		write_log("P96: copyrow() has no conversion for RGB format 0x%X -> drawing nothing!\n", picasso_convert);
 
 	}
 }
